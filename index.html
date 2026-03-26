@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>梅宮跟蘇枋：程式地獄對戰大魔王黑傑克</title>
+    <style>
+        /* ================= 核心主題與全域設定 ================= */
+        :root {
+            --term-green: #0f0;
+            --term-bg: #000;
+            --boss-red: #ff3333;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--term-bg);
+            color: var(--term-green);
+            font-family: 'Courier New', Courier, monospace;
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* CRT 螢幕掃描線濾鏡 */
+        .crt-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* ================= 開場前言 (Prologue) ================= */
+        #prologue-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+            text-align: center;
+            transition: opacity 1s;
+        }
+
+        .prologue-img {
+            max-width: 200px;
+            margin-bottom: 20px;
+            opacity: 0;
+            transition: opacity 1s, filter 1s;
+        }
+
+        .img-player-glow { filter: drop-shadow(0 0 15px var(--term-green)); transform: scaleX(-1); }
+        .img-boss-glow { filter: drop-shadow(0 0 20px var(--boss-red)); animation: glitch-glow 0.5s infinite; }
+
+        #prologue-text { font-size: 1.2rem; min-height: 80px; }
+
+        /* ================= 遊戲主畫面佈局 ================= */
+        #game-screen {
+            display: none; /* 開場前隱藏 */
+            flex-direction: column;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        /* 戰鬥區 (上) */
+        #battle-area {
+            flex: 1;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 2px solid var(--term-green);
+        }
+
+        .character {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 40%;
+        }
+
+        .char-img { width: 150px; height: auto; transition: transform 0.2s; }
+        #player-img { transform: scaleX(-1); } /* 玩家面向右邊 */
+        #boss-img { filter: drop-shadow(0 0 10px var(--boss-red)); } /* 魔王紅色光暈 */
+
+        .hp-container {
+            width: 100%;
+            border: 1px solid var(--term-green);
+            height: 20px;
+            margin-top: 10px;
+            position: relative;
+        }
+
+        .hp-bar {
+            height: 100%;
+            background-color: var(--term-green);
+            width: 100%;
+            transition: width 0.3s, background-color 0.3s;
+        }
+        
+        .boss-hp .hp-bar { background-color: var(--boss-red); }
+
+        .hp-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            top: 0; left: 0;
+            line-height: 20px;
+            font-size: 12px;
+            color: #fff;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        /* 終端機對話框與按鈕區 (下) */
+        #terminal-area {
+            height: 40%;
+            display: flex;
+            flex-direction: column;
+            background: rgba(0, 20, 0, 0.8);
+        }
+
+        #action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 10px;
+            gap: 10px;
+            border-bottom: 1px dashed var(--term-green);
+        }
+
+        button {
+            flex: 1;
+            min-width: calc(50% - 10px);
+            background: transparent;
+            color: var(--term-green);
+            border: 1px solid var(--term-green);
+            padding: 12px;
+            font-family: inherit;
+            font-size: 1rem;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+        
+        button:hover:not(:disabled) { background: var(--term-green); color: #000; }
+        button:disabled { border-color: #333; color: #555; cursor: not-allowed; }
+
+        #log-window {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        /* ================= 動畫與特效 ================= */
+        /* 電腦版衝刺 (水平 X 軸) */
+        @keyframes dash-player-desktop { 50% { transform: scaleX(-1) translateX(-50px) scale(1.1); } }
+        @keyframes dash-boss-desktop { 50% { transform: translateX(-50px) scale(1.1); } }
+        
+        /* 手機版衝刺 (垂直 Y 軸) */
+        @keyframes dash-boss-mobile { 50% { transform: translateY(50px) scale(1.1); } }
+        @keyframes dash-player-mobile { 50% { transform: scaleX(-1) translateY(-50px) scale(1.1); } }
+
+        .anim-dash-player { animation: dash-player-desktop 0.3s ease-in-out; }
+        .anim-dash-boss { animation: dash-boss-desktop 0.3s ease-in-out; }
+
+        /* 亂碼受擊特效 */
+        @keyframes glitch {
+            0% { transform: translate(0); filter: invert(0); }
+            20% { transform: translate(-10px, 5px) skewX(20deg); filter: invert(1) hue-rotate(90deg); }
+            40% { transform: translate(10px, -5px); filter: brightness(2); }
+            60% { transform: translate(-5px, 10px) skewX(-20deg); filter: invert(1); }
+            80% { transform: translate(5px, -10px); filter: hue-rotate(180deg); }
+            100% { transform: translate(0); filter: invert(0); }
+        }
+        .anim-glitch { animation: glitch 0.4s steps(2); }
+
+        /* 戰敗掉落特效 */
+        @keyframes die {
+            to { transform: translateY(100vh); opacity: 0; filter: grayscale(1); }
+        }
+        .anim-die { animation: die 1.5s forwards ease-in; }
+
+        @keyframes glitch-glow {
+            0%, 100% { filter: drop-shadow(0 0 10px var(--boss-red)); }
+            50% { filter: drop-shadow(0 0 30px #f0f) hue-rotate(45deg); }
+        }
+
+        /* ================= RWD 手機版調整 ================= */
+        @media (max-width: 768px) {
+            #battle-area { flex-direction: column; justify-content: space-between; }
+            .character { width: 60%; }
+            #action-buttons {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+            }
+            button { min-width: auto; font-size: 0.8rem; padding: 10px; }
+            
+            /* 手機版衝刺改為上下 */
+            .anim-dash-player { animation: dash-player-mobile 0.3s ease-in-out; }
+            .anim-dash-boss { animation: dash-boss-mobile 0.3s ease-in-out; }
+        }
+    </style>
+</head>
+<body>
+    <div class="crt-overlay"></div>
+
+    <div id="prologue-screen">
+        <img id="prologue-image" class="prologue-img" src="" alt="Prologue">
+        <div id="prologue-text"></div>
+    </div>
+
+    <div id="game-screen">
+        <div id="battle-area">
+            <div class="character boss-hp">
+                <div class="name">大魔王 梅宮</div>
+                <img id="boss-img" class="char-img" src="https://raw.githubusercontent.com/tommy1207-lang/2D/main/%E6%A2%85.png" alt="Boss">
+                <div class="hp-container">
+                    <div id="boss-hp-bar" class="hp-bar"></div>
+                    <div id="boss-hp-text" class="hp-text">10000 / 10000</div>
+                </div>
+            </div>
+
+            <div class="character">
+                <div class="name">蘇枋</div>
+                <img id="player-img" class="char-img" src="https://raw.githubusercontent.com/tommy1207-lang/2D/main/%E8%98%87.png" alt="Player">
+                <div class="hp-container">
+                    <div id="player-hp-bar" class="hp-bar"></div>
+                    <div id="player-hp-text" class="hp-text">150 / 150</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="terminal-area">
+            <div id="action-buttons">
+                <button id="btn-attack" onclick="playerAction('attack')">std::attack()</button>
+                <button id="btn-rm" onclick="playerAction('rm')">sudo rm -rf / [CD: 0]</button>
+                <button id="btn-ctrlc" onclick="playerAction('ctrlc')">Ctrl+C [CD: 0]</button>
+                <button id="btn-heal" onclick="playerAction('heal')">debug_heal()</button>
+            </div>
+            <div id="log-window"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
